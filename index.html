@@ -10,52 +10,47 @@
       name="description"
       content="Celestrac builds the sensors and the intelligence layer that track objects in space and activity on Earth, for operators who cannot afford to guess."
     />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23191939'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23F2E199' stroke-width='1.4'/%3E%3Cpath d='M16 7a9 9 0 0 1 9 9' fill='none' stroke='%236FB8E6' stroke-width='1.4'/%3E%3Ccircle cx='24' cy='12' r='1.6' fill='%23F2E199'/%3E%3C/svg%3E"
+    <link rel="preload" href="/fonts/archivo-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="canonical" href="https://celestrac.com/" />
+    <link rel="preload" href="/poster.png" as="image" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Celestrac" />
+    <meta property="og:url" content="https://celestrac.com/" />
+    <meta property="og:title" content="Celestrac — Every orbit. One picture." />
+    <meta
+      property="og:description"
+      content="Sensors and the intelligence layer that track objects in space and activity on Earth."
     />
-    <script>
-      document.documentElement.classList.add('js')
+    <meta property="og:image" content="https://celestrac.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Celestrac planet limb with orbital tracks over the Pacific." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Celestrac — Every orbit. One picture." />
+    <meta
+      name="twitter:description"
+      content="Sensors and the intelligence layer that track objects in space and activity on Earth."
+    />
+    <meta name="twitter:image" content="https://celestrac.com/og.png" />
+
+    <script type="application/ld+json">
+      { "@context": "https://schema.org", "@type": "Organization", "name": "Celestrac", "url": "https://celestrac.com/" }
     </script>
+    <script src="/boot.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
     <div class="poster" aria-hidden="true">
-      <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" focusable="false">
-        <g fill="none" stroke="#6FB8E6" stroke-width="1" opacity="0.32">
-          <ellipse cx="1000" cy="470" rx="330" ry="120" transform="rotate(-18 1000 470)" />
-          <ellipse cx="1000" cy="470" rx="300" ry="188" transform="rotate(24 1000 470)" />
-          <ellipse cx="1000" cy="470" rx="250" ry="228" transform="rotate(62 1000 470)" />
-          <circle cx="1000" cy="470" r="210" opacity="0.55" />
-          <path d="M812 330a240 240 0 0 1 240 90" stroke="#F2E199" opacity="0.4" />
-        </g>
-        <g fill="#F2E199">
-          <circle cx="1000" cy="470" r="2.5" opacity="0.9" />
-          <circle cx="1270" cy="314" r="1.6" opacity="0.7" />
-          <circle cx="742" cy="638" r="1.4" opacity="0.55" />
-          <circle cx="1184" cy="650" r="1.2" opacity="0.5" />
-          <circle cx="880" cy="236" r="1.1" opacity="0.45" />
-          <circle cx="1120" cy="192" r="1.8" opacity="0.6" />
-        </g>
-        <g fill="#6FB8E6" opacity="0.55">
-          <circle cx="1276" cy="454" r="1.3" />
-          <circle cx="1244" cy="562" r="1.2" />
-        </g>
-      </svg>
+      <img src="/poster.png" alt="" width="1600" height="1000" decoding="async" />
     </div>
 
     <canvas id="stage-canvas" aria-hidden="true"></canvas>
-
-    <div class="hud" aria-hidden="true" id="hud">
-      <div class="hud__meta"><span class="hud__tag">Simulated data</span></div>
-      <dl class="hud__grid">
-        <div><dt>CAM LAT</dt><dd id="hud-lat">+00.00</dd></div>
-        <div><dt>CAM LON</dt><dd id="hud-lon">+000.00</dd></div>
-        <div><dt>TRACKS</dt><dd id="hud-tracks">00</dd></div>
-        <div><dt>UTC</dt><dd id="hud-utc">00:00:00Z</dd></div>
-      </dl>
-    </div>
 
     <header class="site-header">
       <div class="site-header__inner">
@@ -70,19 +65,13 @@
 
         <nav class="nav" aria-label="Primary">
           <ul class="nav__links">
-            <li><a href="#chapter-01" data-jump="1">Platform</a></li>
-            <li><a href="#chapter-02" data-jump="2">Hardware</a></li>
-            <li><a href="#chapter-03" data-jump="3">Missions</a></li>
-            <li><a href="#chapter-05" data-jump="5">Contact</a></li>
+            <li><a href="#orrery">Platform</a></li>
+            <li><a href="#tycho">Hardware</a></li>
+            <li><a href="#missions">Missions</a></li>
+            <li><a href="#contact">Contact</a></li>
           </ul>
-          <a class="btn btn--primary btn--small nav__cta" href="#chapter-05" data-jump="5">Request a briefing</a>
-          <button
-            class="menu-btn"
-            type="button"
-            aria-expanded="false"
-            aria-controls="mobile-menu"
-            id="menu-open"
-          >
+          <a class="btn btn--line btn--small nav__cta" href="#contact">Request a briefing</a>
+          <button class="menu-btn" type="button" aria-expanded="false" aria-controls="mobile-menu" id="menu-open">
             Menu
           </button>
         </nav>
@@ -102,201 +91,272 @@
         <button class="menu-btn" type="button" id="menu-close">Close</button>
       </div>
       <nav class="menu-sheet__nav" aria-label="Menu">
-        <a href="#chapter-01" data-jump="1"><span class="mono">01</span>Platform</a>
-        <a href="#chapter-02" data-jump="2"><span class="mono">02</span>Hardware</a>
-        <a href="#chapter-03" data-jump="3"><span class="mono">03</span>Missions</a>
-        <a href="#chapter-05" data-jump="5"><span class="mono">05</span>Contact</a>
+        <a href="#orrery">Platform</a>
+        <a href="#tycho">Hardware</a>
+        <a href="#missions">Missions</a>
+        <a href="#contact">Contact</a>
       </nav>
-      <a class="btn btn--primary menu-sheet__cta" href="#chapter-05" data-jump="5">Request a briefing</a>
-    </div>
-
-    <nav class="rail" aria-label="Chapter index" id="chapter-rail">
-      <a href="#chapter-01" data-jump="1" data-rail="1"><span class="rail__num">01</span><span class="rail__name">Intelligence</span></a>
-      <a href="#chapter-02" data-jump="2" data-rail="2"><span class="rail__num">02</span><span class="rail__name">Hardware</span></a>
-      <a href="#chapter-03" data-jump="3" data-rail="3"><span class="rail__num">03</span><span class="rail__name">Missions</span></a>
-      <a href="#chapter-04" data-jump="4" data-rail="4"><span class="rail__num">04</span><span class="rail__name">Operating loop</span></a>
-      <a href="#chapter-05" data-jump="5" data-rail="5"><span class="rail__num">05</span><span class="rail__name">Contact</span></a>
-    </nav>
-
-    <div class="meter" aria-hidden="true">
-      <span class="meter__bar"><span class="meter__fill" id="meter-fill"></span></span>
-      <span class="meter__count mono" id="meter-count">00 / 05</span>
+      <a class="btn btn--action menu-sheet__cta" href="#contact">Request a briefing</a>
     </div>
 
     <main id="main">
-      <div class="stage" id="stage">
-        <section class="chapter chapter--hero is-active" id="chapter-00" data-chapter="0" aria-labelledby="hero-title">
-          <div class="chapter__copy">
-            <p class="eyebrow mono">CELESTRAC</p>
-            <h1 id="hero-title" data-split>Every orbit. One picture.</h1>
-            <p class="chapter__lede">
-              Celestrac builds the sensors and the intelligence layer that track objects in space and activity on
-              Earth, for operators who cannot afford to guess.
+      <section class="stage stage--hero" id="hero" data-stage="hero" aria-labelledby="hero-title">
+        <div class="stage__sticky">
+          <div class="hero">
+            <div class="hero__foot">
+              <h1 class="hero__title" id="hero-title" aria-label="Every orbit. One picture." data-mask>
+                <span class="line"><span>Every orbit.</span></span>
+                <span class="line"><span>One picture.</span></span>
+              </h1>
+
+              <div class="hero__row">
+                <p class="hero__lede">
+                  Celestrac builds the sensors and the intelligence layer that track objects in space and activity
+                  on Earth, for operators who cannot afford to guess.
+                </p>
+                <div class="actions">
+                  <a class="btn btn--action" href="#contact">Request a briefing</a>
+                  <a class="link-underline" href="#orrery">Open Orrery</a>
+                </div>
+              </div>
+
+            </div>
+
+            <p class="hero__caption annot">
+              <span>Tycho over the Pacific</span>
+              <span>Scale 1:1 250 000</span>
+              <span>Sample data</span>
             </p>
-            <div class="actions">
-              <a class="btn btn--primary" href="#chapter-05" data-jump="5">Request a briefing</a>
-              <a class="text-link" href="#chapter-01" data-jump="1">
-                See how it works
-                <svg viewBox="0 0 14 14" aria-hidden="true" focusable="false">
-                  <path d="M2 7h9M7.5 3.5 11 7l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.1" />
-                </svg>
-              </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="orrery-section" id="orrery" aria-labelledby="orrery-title">
+        <header class="orrery__head">
+          <h2 id="orrery-title">Orrery</h2>
+          <p class="orrery__lede">
+            The single operational picture. Every track carries its source, its confidence and its age, so the
+            person making the call knows what they are looking at before they commit.
+          </p>
+        </header>
+
+        <div class="frame" id="orrery-frame">
+          <div class="frame__bar">
+            <span class="annot frame__bar-title">Orrery · operational picture</span>
+            <span class="annot" id="track-count">40 tracks</span>
+            <span class="annot frame__bar-end">Sample data</span>
+          </div>
+
+          <div class="frame__body">
+            <div class="map">
+              <canvas
+                id="map-canvas"
+                role="img"
+                aria-label="World map plotting 40 sample tracks. The track list below the map is the accessible view."
+              ></canvas>
+              <div class="map__key annot">
+                <span><i class="key key--data" aria-hidden="true"></i>Track</span>
+                <span><i class="key key--action" aria-hidden="true"></i>Selected</span>
+                <span>30° graticule</span>
+              </div>
+            </div>
+
+            <div class="frame__side">
+              <div class="table-wrap" id="table-wrap">
+                <table class="tracks" id="tracks-table">
+                  <caption class="annot">
+                    Sample tracks, newest first. Select a row to inspect it.
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" class="annot">Object</th>
+                      <th scope="col" class="annot">Type</th>
+                      <th scope="col" class="annot">Source</th>
+                      <th scope="col" class="annot">Conf.</th>
+                      <th scope="col" class="annot">Age</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tracks-body"></tbody>
+                </table>
+                <noscript>
+                  <p class="table-fallback">
+                    The Orrery table needs JavaScript. The rest of the page reads without it.
+                  </p>
+                </noscript>
+              </div>
+
+              <div class="drawer" id="track-drawer" aria-live="polite">
+                <div class="drawer__head">
+                  <p class="annot" id="drawer-id">Select a track</p>
+                  <button class="drawer__close" type="button" id="drawer-close" aria-label="Close track detail" hidden>
+                    Close
+                  </button>
+                </div>
+                <h3 class="drawer__title" id="drawer-title">No track selected</h3>
+                <dl class="drawer__facts" id="drawer-facts"></dl>
+                <ol class="drawer__life" id="drawer-life" aria-label="Track life"></ol>
+              </div>
             </div>
           </div>
-        </section>
 
-        <section class="chapter" id="chapter-01" data-chapter="1" aria-labelledby="platform-title">
-          <div class="chapter__copy">
-            <p class="eyebrow mono">01 / Intelligence</p>
-            <h2 id="platform-title" data-split>Intelligence that starts at the sensor.</h2>
-            <p class="chapter__body">
-              Celestrac fuses orbital, aerial and ground data into a single operational picture. Every track carries
-              its source, its confidence and its age, so the person making the call knows exactly what they are
-              looking at.
-            </p>
-            <dl class="specs">
-              <div class="spec">
-                <dt class="mono">Provenance</dt>
-                <dd>Every track traces back to its sensor.</dd>
-              </div>
-              <div class="spec">
-                <dt class="mono">Confidence</dt>
-                <dd>Scored on every track, never hidden.</dd>
-              </div>
-              <div class="spec">
-                <dt class="mono">Connectivity</dt>
-                <dd>Runs connected or fully disconnected.</dd>
-              </div>
+          <div class="frame__foot annot">
+            <span>Fuse latency 0.8 s</span>
+            <span>Sources 4</span>
+            <span>Map 110 m land</span>
+          </div>
+        </div>
+
+        <p class="plate">
+          Plate II. Tracks over the Pacific. Sample data. Confidence and age are computed on every row; nothing on
+          this frame is hidden from the operator.
+        </p>
+      </section>
+
+      <section class="stage stage--hardware" id="tycho" data-stage="hardware" aria-labelledby="tycho-title">
+        <div class="stage__sticky">
+          <div class="hardware">
+            <header class="hardware__head">
+              <h2 id="tycho-title">Tycho</h2>
+              <p class="hardware__sentence">
+                The orbital sensor satellite. A wide-field telescope on a three-axis bus, built to be flown in
+                numbers and serviced by the people who wrote the software.
+              </p>
+            </header>
+
+            <svg class="draft" id="draft" aria-hidden="true" focusable="false">
+              <g id="draft-lines" fill="none" stroke="currentColor" stroke-width="1"></g>
+            </svg>
+            <div class="draft-labels" id="draft-labels" aria-hidden="true"></div>
+
+            <dl class="hardware__specs">
+              <!-- TODO(owner): confirm -->
+              <div><dt class="annot">Aperture</dt><dd>Ø 0.42 m</dd></div>
+              <!-- TODO(owner): confirm -->
+              <div><dt class="annot">Orbit</dt><dd>600 km · 98.0°</dd></div>
+              <!-- TODO(owner): confirm -->
+              <div><dt class="annot">Mass</dt><dd>1 120 kg</dd></div>
+              <!-- TODO(owner): confirm -->
+              <div><dt class="annot">Downlink</dt><dd>2 × 400 Mbit/s</dd></div>
             </dl>
+            <p class="hardware__note annot">Dimensions nominal. Sample data.</p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section class="chapter" id="chapter-02" data-chapter="2" aria-labelledby="hardware-title">
-          <div class="chapter__copy">
-            <p class="eyebrow mono">02 / Hardware</p>
-            <h2 id="hardware-title" data-split>Built to be flown, fielded and fixed.</h2>
-            <p class="chapter__body">
-              Sensors, payloads and ground terminals designed in-house, next to the software that runs them. One
-              team owns the chain from aperture to interface.
-            </p>
+      <section class="products" id="products" aria-labelledby="products-title">
+        <header class="products__head">
+          <h2 id="products-title">Three parts. One chain.</h2>
+          <p class="products__lede">
+            Software-defined and hardware-enabled: one team owns the path from aperture to interface, so a change
+            at the sensor reaches the operator in the same release.
+          </p>
+        </header>
+
+        <div class="spec">
+          <article class="spec__row">
+            <h3 class="spec__name">Orrery</h3>
+            <p class="spec__sentence">The intelligence platform: every sensor, feed and track in one operational picture.</p>
+            <ul class="spec__caps">
+              <!-- TODO(owner): confirm -->
+              <li>Fuses orbital, aerial and ground sources into a single track list.</li>
+              <!-- TODO(owner): confirm -->
+              <li>Carries source, confidence and age on every track it shows.</li>
+              <!-- TODO(owner): confirm -->
+              <li>Runs connected, or fully disconnected in the field.</li>
+            </ul>
+          </article>
+
+          <article class="spec__row">
+            <h3 class="spec__name">Tycho</h3>
+            <p class="spec__sentence">The orbital sensor satellite: wide-field imaging from a three-axis bus.</p>
+            <ul class="spec__caps">
+              <!-- TODO(owner): confirm -->
+              <li>Sun-synchronous orbit at 600 km, 98.0° inclination.</li>
+              <!-- TODO(owner): confirm -->
+              <li>0.42 m aperture, 1 120 kg launch mass.</li>
+              <!-- TODO(owner): confirm -->
+              <li>On-board compression before the X-band downlink.</li>
+            </ul>
+          </article>
+
+          <article class="spec__row">
+            <h3 class="spec__name">Sextant</h3>
+            <p class="spec__sentence">The ground terminal: a transportable station that closes the link.</p>
+            <ul class="spec__caps">
+              <!-- TODO(owner): confirm -->
+              <li>2.4 m dish in two cases a two-person crew can carry.</li>
+              <!-- TODO(owner): confirm -->
+              <li>X-band receive and S-band command on one mount.</li>
+              <!-- TODO(owner): confirm -->
+              <li>Runs from vehicle power or a six-hour battery.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="missions" id="missions" aria-labelledby="missions-title">
+        <div class="missions__text">
+        <header class="section-head section-head--missions">
+          <div class="section-head__title">
+            <h2 id="missions-title">One system.<br />Two missions.</h2>
           </div>
-          <ul class="callouts" aria-label="Satellite components">
-            <li class="callout" data-part="payload" data-side="left">
-              <span class="callout__line" aria-hidden="true"></span>
-              <span class="callout__label mono">Optical payload</span>
-            </li>
-            <li class="callout" data-part="bus" data-side="left">
-              <span class="callout__line" aria-hidden="true"></span>
-              <span class="callout__label mono">Bus</span>
-            </li>
-            <li class="callout" data-part="array" data-side="right">
-              <span class="callout__line" aria-hidden="true"></span>
-              <span class="callout__label mono">Solar array</span>
-            </li>
-            <li class="callout" data-part="antenna" data-side="right">
-              <span class="callout__line" aria-hidden="true"></span>
-              <span class="callout__label mono">Crosslink antenna</span>
-            </li>
-          </ul>
-        </section>
 
-        <section class="chapter" id="chapter-03" data-chapter="3" aria-labelledby="missions-title">
-          <div class="chapter__copy">
-            <p class="eyebrow mono">03 / Missions</p>
-            <h2 id="missions-title" data-split>One system. Two missions.</h2>
-
-            <div class="mission-toggle" role="radiogroup" aria-label="Mission type">
+          <div class="missions__control">
+            <p class="annot" id="overlay-label">Canvas overlay</p>
+            <div class="toggle" role="radiogroup" aria-labelledby="overlay-label">
               <button
-                class="mission-toggle__option is-checked"
+                class="toggle__option is-on"
                 type="button"
                 role="radio"
                 aria-checked="true"
                 tabindex="0"
-                id="mode-civil"
                 data-mode="civil"
               >
                 Civil
               </button>
               <button
-                class="mission-toggle__option"
+                class="toggle__option"
                 type="button"
                 role="radio"
                 aria-checked="false"
                 tabindex="-1"
-                id="mode-defense"
                 data-mode="defense"
               >
                 Defense
               </button>
             </div>
-
-            <div class="mission-panel" id="panel-civil" role="group" aria-labelledby="mode-civil">
-              <p class="chapter__body">
-                Disaster response, port and maritime safety, utilities and infrastructure, land and climate
-                monitoring. The same picture, used to keep things running.
-              </p>
-              <ul class="mission-list">
-                <li><span class="mono">01</span>Disaster response</li>
-                <li><span class="mono">02</span>Maritime and port safety</li>
-                <li><span class="mono">03</span>Infrastructure and utilities</li>
-                <li><span class="mono">04</span>Land and climate monitoring</li>
-              </ul>
-            </div>
-
-            <div class="mission-panel" id="panel-defense" role="group" aria-labelledby="mode-defense" hidden>
-              <p class="chapter__body">
-                Space domain awareness, airspace and maritime surveillance, logistics and readiness, operations in
-                contested environments. The same picture, used to avoid surprise.
-              </p>
-              <ul class="mission-list">
-                <li><span class="mono">01</span>Space domain awareness</li>
-                <li><span class="mono">02</span>Airspace and maritime surveillance</li>
-                <li><span class="mono">03</span>Logistics and readiness</li>
-                <li><span class="mono">04</span>Contested-environment operations</li>
-              </ul>
-            </div>
           </div>
-        </section>
+        </header>
 
-        <section class="chapter chapter--loop" id="chapter-04" data-chapter="4" aria-labelledby="loop-title">
-          <div class="chapter__copy chapter__copy--wide">
-            <div class="loop__head">
-              <p class="eyebrow mono">04 / Operating loop</p>
-              <h2 id="loop-title" data-split>Sense. Fuse. Decide. Deliver.</h2>
-            </div>
-            <ol class="steps">
-              <li class="step" data-step="0">
-                <span class="step__num mono">01</span>
-                <h3>Sense</h3>
-                <p>Our payloads and partner feeds collect the raw signal.</p>
-              </li>
-              <li class="step" data-step="1">
-                <span class="step__num mono">02</span>
-                <h3>Fuse</h3>
-                <p>Sources are correlated into tracks with provenance and confidence.</p>
-              </li>
-              <li class="step" data-step="2">
-                <span class="step__num mono">03</span>
-                <h3>Decide</h3>
-                <p>Operators see the picture, the uncertainty and the options.</p>
-              </li>
-              <li class="step" data-step="3">
-                <span class="step__num mono">04</span>
-                <h3>Deliver</h3>
-                <p>Decisions move to the field over whatever link survives.</p>
-              </li>
-            </ol>
+        <div class="missions__columns">
+          <div class="missions__col">
+            <h3>Civil</h3>
+            <p>
+              Disaster response, maritime safety, infrastructure and land monitoring: the same picture, used to
+              keep things running when the day does not go to plan.
+            </p>
           </div>
-        </section>
+          <div class="missions__col">
+            <h3>Defense</h3>
+            <p>
+              Space domain awareness, airspace and maritime surveillance, logistics and readiness: the same
+              picture, used to avoid surprise in contested environments.
+            </p>
+          </div>
+        </div>
+        </div>
 
-        <div class="scanline" aria-hidden="true"></div>
-      </div>
+        <div class="missions__window" aria-hidden="true"></div>
 
-      <section class="contact" id="chapter-05" data-chapter="5" aria-labelledby="contact-title">
-        <div class="contact__inner">
-          <div class="contact__copy">
-            <p class="eyebrow mono">05 / Contact</p>
-            <h2 id="contact-title" data-split>Tell us what you need to see.</h2>
+        <p class="missions__note annot">
+          Overlay shows <span id="mode-label">civil</span> coverage. Sample data.
+        </p>
+      </section>
+
+      <section class="contact" id="contact" aria-labelledby="contact-title">
+        <div class="contact__grid">
+          <div class="contact__head">
+            <h2 id="contact-title">Tell us what<br />you need to see.</h2>
             <p class="contact__sub">Briefings are scoped to your mission and held with your team.</p>
           </div>
 
@@ -304,35 +364,40 @@
             <form id="briefing-form" novalidate>
               <div id="briefing-fields">
                 <div class="field">
-                  <label class="field__label mono" for="field-name">Name</label>
+                  <label class="field__label annot" for="field-name">Name</label>
                   <input id="field-name" name="name" type="text" autocomplete="name" aria-describedby="error-name" required />
                   <p class="field__error" id="error-name" hidden></p>
                 </div>
 
                 <div class="field">
-                  <label class="field__label mono" for="field-org">Organization</label>
+                  <label class="field__label annot" for="field-org">Organization</label>
                   <input id="field-org" name="organization" type="text" autocomplete="organization" aria-describedby="error-org" required />
                   <p class="field__error" id="error-org" hidden></p>
                 </div>
 
                 <div class="field">
-                  <label class="field__label mono" for="field-email">Work email</label>
+                  <label class="field__label annot" for="field-email">Work email</label>
                   <input id="field-email" name="email" type="email" autocomplete="email" aria-describedby="error-email" required />
                   <p class="field__error" id="error-email" hidden></p>
                 </div>
 
                 <div class="field">
-                  <label class="field__label mono" for="field-message">What do you need to see?</label>
+                  <label class="field__label annot" for="field-message">What do you need to see?</label>
                   <textarea id="field-message" name="message" rows="4" aria-describedby="error-message" required></textarea>
                   <p class="field__error" id="error-message" hidden></p>
                 </div>
 
-                <button class="btn btn--primary form__submit" type="submit">Request a briefing</button>
+                <div class="form__trap" aria-hidden="true">
+                  <label for="field-company-url">Company URL</label>
+                  <input id="field-company-url" name="company_url" type="text" tabindex="-1" autocomplete="off" />
+                </div>
+
+                <button class="btn btn--action form__submit" type="submit">Request a briefing</button>
               </div>
 
               <div class="form__status" id="form-status" role="status" aria-live="polite" tabindex="-1" hidden>
                 <p class="form__status-text" id="form-status-text"></p>
-                <button class="btn btn--quiet" type="button" id="form-retry" hidden>Retry</button>
+                <button class="btn btn--line" type="button" id="form-retry" hidden>Retry</button>
               </div>
             </form>
           </div>
@@ -342,7 +407,7 @@
 
     <footer class="site-footer">
       <div class="site-footer__inner">
-        <a class="wordmark wordmark--footer" href="#main" aria-label="Celestrac home">
+        <a class="wordmark" href="#main" aria-label="Celestrac home">
           <svg class="wordmark__mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" stroke-width="1.1" />
             <path d="M12 3.75A8.25 8.25 0 0 1 20.25 12" fill="none" stroke="#6FB8E6" stroke-width="1.1" />
@@ -351,15 +416,15 @@
           <span>CELESTRAC</span>
         </a>
         <nav class="footer-links" aria-label="Footer">
-          <a href="#chapter-01" data-jump="1">Platform</a>
-          <a href="#chapter-02" data-jump="2">Hardware</a>
-          <a href="#chapter-03" data-jump="3">Missions</a>
-          <a href="#chapter-05" data-jump="5">Contact</a>
+          <a href="#orrery">Platform</a>
+          <a href="#tycho">Hardware</a>
+          <a href="#missions">Missions</a>
+          <a href="#contact">Contact</a>
         </nav>
-        <div class="footer-meta mono">
-          <span>(c) 2026 Celestrac</span>
+        <p class="footer-meta annot">
+          <span>© 2026 Celestrac</span>
           <span>Visualizations use simulated data.</span>
-        </div>
+        </p>
       </div>
     </footer>
 

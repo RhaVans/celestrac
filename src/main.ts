@@ -1,432 +1,65 @@
-import '@fontsource/ibm-plex-sans/latin-400.css'
-import '@fontsource/ibm-plex-sans/latin-500.css'
-import '@fontsource/ibm-plex-sans/latin-600.css'
-import '@fontsource/ibm-plex-mono/latin-400.css'
-import '@fontsource/ibm-plex-mono/latin-500.css'
+import './fonts.css'
 import './styles.css'
 
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
-import { createScene, type SceneHandle } from './scene/scene'
+import type { SceneHandle, ViewKey } from './scene/scene'
 import type { MissionMode } from './scene/overlays'
 
 gsap.registerPlugin(ScrollTrigger)
 
 const root = document.documentElement
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-root.classList.toggle('reduced', reduced)
-root.classList.add('app-ready')
-
 const $ = <T extends Element>(selector: string, scope: ParentNode = document): T | null =>
   scope.querySelector<T>(selector)
 const $$ = <T extends Element>(selector: string, scope: ParentNode = document): T[] =>
   Array.from(scope.querySelectorAll<T>(selector))
 
-const chapters = $$<HTMLElement>('.chapter')
-const contactSection = $('#chapter-05')
-const railLinks = $$<HTMLAnchorElement>('[data-rail]')
-const meterFill = $<HTMLElement>('#meter-fill')
-const meterCount = $<HTMLElement>('#meter-count')
-const steps = $$<HTMLElement>('.step')
+root.classList.toggle('reduced', reduced)
+root.classList.add('motion-ready')
+
+const SECTIONS = ['hero', 'orrery', 'tycho', 'products', 'missions', 'contact'] as const
 
 let scene: SceneHandle | null = null
-let pinTrigger: ScrollTrigger | null = null
-let masterTimeline: gsap.core.Timeline | null = null
 let lenis: Lenis | null = null
-let currentStep = -1
-
-const canvas = $('#stage-canvas')
-if (canvas instanceof HTMLCanvasElement) {
-  try {
-    const created = createScene(canvas, reduced)
-    if (created) {
-      scene = created
-      root.classList.add('has-gl')
-      created.resize()
-    }
-  } catch (error) {
-    console.warn('WebGL scene unavailable; using the static fallback.', error)
-    scene = null
-    root.classList.remove('has-gl')
-  }
+let triggersReady = false
+const clamp = (v: number): number => Math.min(1, Math.max(0, v))
+const smooth = (v: number): number => {
+  const t = clamp(v)
+  return t * t * (3 - 2 * t)
 }
 
-/* --------------------------------------------------------------- chrome */
+/* ------------------------------------------------------------------ chrome */
 
-function setRail(active: number): void {
-  railLinks.forEach((link) => {
-    const value = Number(link.dataset.rail)
-    link.setAttribute('aria-current', value === active ? 'true' : 'false')
+const header = $<HTMLElement>('.site-header')
+const navLinks = $$<HTMLAnchorElement>('.nav__links a')
+
+function setStuck(): void {
+  header?.classList.toggle('is-stuck', window.scrollY > 16)
+}
+setStuck()
+window.addEventListener('scroll', setStuck, { passive: true })
+
+function setNav(id: string): void {
+  navLinks.forEach((link) => {
+    link.setAttribute('aria-current', link.getAttribute('href') === `#${id}` ? 'true' : 'false')
   })
 }
 
-function setMeter(progress: number, chapter: number): void {
-  if (meterFill) meterFill.style.width = `${Math.round(progress * 100)}%`
-  if (meterCount) {
-    meterCount.textContent = `${String(chapter).padStart(2, '0')} / 05`
-  }
+function setReading(value: boolean): void {
+  root.classList.toggle('is-reading', value)
 }
 
-function setSteps(active: number): void {
-  if (active === currentStep) return
-  currentStep = active
-  steps.forEach((step, index) => {
-    step.classList.toggle('is-current', index === active)
-  })
-}
-
-function updateChrome(progress: number): void {
-  const p = Math.min(1, Math.max(0, progress))
-  const chapter = Math.min(4, Math.floor(p * 5 + 0.0001))
-  setRail(p <= 0.001 ? 0 : chapter)
-  setMeter(p, chapter)
-  if (chapter === 4 && p >= 0.8) {
-    setSteps(Math.min(3, Math.floor((p - 0.8) / 0.05)))
-  } else if (chapter !== 4) {
-    setSteps(-1)
-  }
-}
-
-/* --------------------------------------------------------------- headings */
-
-function splitHeading(element: HTMLElement): HTMLElement[] {
-  if (element.dataset.original) {
-    return $$<HTMLElement>('.line-inner', element)
-  }
-
-  const original = (element.textContent ?? '').replace(/\s+/g, ' ').trim()
-  element.dataset.original = original
-  element.textContent = ''
-  element.setAttribute('aria-label', original)
-
-  const words = original.split(' ')
-  const wordSpans = words.map((word, index) => {
-    const span = document.createElement('span')
-    span.textContent = word
-    span.style.display = 'inline'
-    element.appendChild(span)
-    if (index < words.length - 1) element.appendChild(document.createTextNode(' '))
-    return span
-  })
-
-  const lines: string[][] = []
-  let currentTop = Number.NaN
-  wordSpans.forEach((span, index) => {
-    const top = Math.round(span.offsetTop)
-    if (Number.isNaN(currentTop) || Math.abs(top - currentTop) > 2) {
-      lines.push([])
-      currentTop = top
-    }
-    lines[lines.length - 1].push(words[index])
-  })
-
-  element.textContent = ''
-  element.setAttribute('aria-label', original)
-  const inner: HTMLElement[] = []
-  lines.forEach((line) => {
-    const mask = document.createElement('span')
-    mask.className = 'line-mask'
-    const span = document.createElement('span')
-    span.className = 'line-inner'
-    span.setAttribute('aria-hidden', 'true')
-    span.textContent = line.join(' ')
-    mask.appendChild(span)
-    element.appendChild(mask)
-    inner.push(span)
-  })
-  return inner
-}
-
-function restoreHeadings(): void {
-  $$<HTMLElement>('[data-split]').forEach((element) => {
-    if (element.dataset.original) {
-      element.textContent = element.dataset.original
-      element.removeAttribute('aria-label')
-      delete element.dataset.original
-    }
-  })
-}
-
-/* ----------------------------------------------------------------- motion */
-
-function buildMotion(linesByChapter: HTMLElement[][]): void {
-  const stage = $('#stage')
-  const scan = $('.scanline')
-  if (!stage || !scan) return
-
-  let heroLines: HTMLElement[] = []
-
-  chapters.forEach((chapter, index) => {
-    if (index > 0) {
-      gsap.set(chapter, { autoAlpha: 0 })
-    }
-  })
-
-  heroLines = linesByChapter[0] ?? []
-  gsap.set(heroLines, { yPercent: 110 })
-  linesByChapter.slice(1).forEach((lines) => gsap.set(lines, { yPercent: 110 }))
-
-  const finePointer = window.matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)')
-    .matches
-  const horizontal = window.innerWidth >= 640
-  const hiddenClip = horizontal ? 'inset(0% 100% 0% 0%)' : 'inset(100% 0% 0% 0%)'
-  const revealedClip = 'inset(0% 0% 0% 0%)'
-  const clippedAway = horizontal ? 'inset(0% 0% 0% 100%)' : 'inset(100% 0% 0% 0%)'
-
-  chapters.slice(1).forEach((chapter) => gsap.set(chapter, { clipPath: hiddenClip }))
-
-  const snapPoints = [0, 0.2, 0.4, 0.6, 0.8, 1]
-
-  const timeline = gsap.timeline({
-    defaults: { ease: 'power2.inOut' },
-    scrollTrigger: {
-      trigger: stage,
-      start: 'top top',
-      end: () => `+=${window.innerHeight * 7.5}`,
-      pin: true,
-      pinSpacing: true,
-      scrub: 1,
-      anticipatePin: 1,
-      invalidateOnRefresh: true,
-      onUpdate: (self) => {
-        scene?.setProgress(self.progress)
-        updateChrome(self.progress)
-      },
-      onRefresh: (self) => {
-        scene?.setProgress(self.progress)
-        updateChrome(self.progress)
-      },
-    },
-  })
-
-  // Keeps the timeline at a normalised duration while children are positioned in 0..1.
-  timeline.to({ value: 0 }, { value: 1, duration: 1, ease: 'none' }, 0)
-
-  ;[0.2, 0.4, 0.6, 0.8].forEach((boundary, index) => {
-    const outgoing = chapters[index]
-    const incoming = chapters[index + 1]
-    if (!outgoing || !incoming) return
-    const start = boundary - 0.06
-
-    timeline.set(incoming, { autoAlpha: 1 }, start)
-    timeline.fromTo(
-      incoming,
-      { clipPath: hiddenClip },
-      { clipPath: revealedClip, duration: 0.06, ease: 'none', immediateRender: false },
-      start,
-    )
-    timeline.fromTo(
-      outgoing,
-      { clipPath: revealedClip },
-      { clipPath: clippedAway, duration: 0.06, ease: 'none', immediateRender: false },
-      start,
-    )
-    timeline.set(outgoing, { autoAlpha: 0 }, boundary)
-
-    timeline.set(scan, { opacity: 1, '--sweep': 0 }, start)
-    timeline.to(scan, { '--sweep': 1, duration: 0.06, ease: 'none' }, start)
-    timeline.set(scan, { opacity: 0 }, boundary)
-
-    const incomingLines = linesByChapter[index + 1] ?? []
-    timeline.fromTo(
-      incomingLines,
-      { yPercent: 110 },
-      {
-        yPercent: 0,
-        duration: 0.05,
-        stagger: 0.008,
-        ease: 'power2.out',
-        immediateRender: false,
-      },
-      start + 0.004,
-    )
-  })
-
-  timeline.fromTo('.callouts', { opacity: 0 }, { opacity: 1, duration: 0.04 }, 0.42)
-  timeline.to('.callouts', { opacity: 0, duration: 0.03 }, 0.58)
-
-  pinTrigger = timeline.scrollTrigger ?? null
-  masterTimeline = timeline
-
-  if (!finePointer) {
-    lenis = null
-  } else {
-    lenis = new Lenis({ lerp: 0.1 })
-    let snapTimer = 0
-    let snapTarget: number | null = null
-    lenis.on('scroll', ({ scroll }) => {
-      ScrollTrigger.update()
-      const trigger = pinTrigger
-      if (!trigger || reduced) return
-      if (scroll > trigger.end - 2) return
-      if (snapTarget !== null && Math.abs(scroll - snapTarget) < 3) return
-
-      window.clearTimeout(snapTimer)
-      snapTimer = window.setTimeout(() => {
-        if (!trigger || window.scrollY > trigger.end - 2) return
-        const progress = trigger.progress
-        const nearest = snapPoints.reduce((best, point) =>
-          Math.abs(point - progress) < Math.abs(best - progress) ? point : best,
-        )
-        if (Math.abs(nearest - progress) < 0.015) return
-        snapTarget = trigger.start + nearest * (trigger.end - trigger.start)
-        lenis?.scrollTo(snapTarget, {
-          duration: 0.65,
-          easing: (t: number) => 1 - Math.pow(1 - t, 3),
-        })
-        window.setTimeout(() => {
-          snapTarget = null
-        }, 760)
-      }, 170)
-    })
-    gsap.ticker.add((time) => {
-      lenis?.raf(time * 1000)
-    })
-    gsap.ticker.lagSmoothing(0)
-  }
-
-  updateChrome(0)
-  scene?.setProgress(0)
-
-  if (contactSection) {
-    ScrollTrigger.create({
-      trigger: contactSection,
-      start: 'top bottom',
-      end: 'top 15%',
-      onUpdate: (self) => {
-        scene?.setContact(self.progress)
-        root.classList.toggle('is-contact', self.progress > 0.02)
-        if (self.progress > 0.08) {
-          setRail(5)
-          setMeter(1, 5)
-          setSteps(-1)
-        }
-      },
-    })
-  }
-
-  root.classList.add('motion-ready')
-  requestAnimationFrame(() => {
-    gsap.fromTo(
-      heroLines,
-      { yPercent: 110 },
-      {
-        yPercent: 0,
-        duration: 1.1,
-        stagger: 0.09,
-        ease: 'expo.out',
-        delay: 0.15,
-      },
-    )
-  })
-}
-
-/* ------------------------------------------------------------- navigation */
-
-function currentChapter(): number {
-  if (pinTrigger) {
-    if (window.scrollY >= pinTrigger.end - 2) return 5
-    return Math.min(4, Math.floor(pinTrigger.progress * 5 + 0.02))
-  }
-  const sections = $$<HTMLElement>('[data-chapter]')
-  const mid = window.innerHeight * 0.45
-  let active = 0
-  sections.forEach((section) => {
-    if (section.getBoundingClientRect().top <= mid) {
-      active = Number(section.dataset.chapter ?? 0)
-    }
-  })
-  return active
-}
-
-function scrollToY(target: number): void {
-  const max = document.documentElement.scrollHeight - window.innerHeight
-  const y = Math.min(max, Math.max(0, target))
-  if (lenis) {
-    lenis.scrollTo(y, { duration: 1.1 })
-  } else {
-    window.scrollTo({ top: y, behavior: reduced ? 'auto' : 'smooth' })
-  }
-}
-
-function jumpTo(index: number, moveFocus = true): void {
-  let y = 0
-  if (pinTrigger) {
-    y =
-      index >= 5
-        ? pinTrigger.end + 8
-        : pinTrigger.start + (index / 5) * (pinTrigger.end - pinTrigger.start) + 2
-  } else {
-    const target =
-      index >= 5
-        ? contactSection
-        : document.getElementById(`chapter-0${Math.min(4, Math.max(0, index))}`)
-    if (target) y = target.getBoundingClientRect().top + window.scrollY
-  }
-
-  scrollToY(y)
-
-  if (moveFocus) {
-    const heading =
-      index >= 5
-        ? contactSection?.querySelector<HTMLElement>('h2')
-        : document
-            .getElementById(`chapter-0${Math.min(4, Math.max(0, index))}`)
-            ?.querySelector<HTMLElement>('h1, h2')
-    window.setTimeout(() => {
-      if (!heading) return
-      heading.setAttribute('tabindex', '-1')
-      heading.focus({ preventScroll: true })
-    }, 850)
-  }
-}
-
-function moveChapter(delta: number): void {
-  const next = Math.min(5, Math.max(0, currentChapter() + delta))
-  jumpTo(next, false)
-}
-
-document.addEventListener('click', (event) => {
-  const link = (event.target as Element | null)?.closest<HTMLElement>('[data-jump]')
-  if (!link) return
-  event.preventDefault()
-  const index = Number(link.dataset.jump)
-  if (menuOpen) closeMenu(false)
-  jumpTo(index)
-})
-
-document.addEventListener('keydown', (event) => {
-  if (menuOpen) return
-  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('input, textarea, select, [contenteditable="true"], [role="radio"]')) return
-
-  if (event.key === 'PageDown' || event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-    event.preventDefault()
-    moveChapter(1)
-  } else if (event.key === 'PageUp' || event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-    event.preventDefault()
-    moveChapter(-1)
-  } else if (event.key === 'Home') {
-    event.preventDefault()
-    jumpTo(0, false)
-  } else if (event.key === 'End') {
-    event.preventDefault()
-    jumpTo(5, false)
-  }
-})
-
-/* ------------------------------------------------------------------- menu */
+/* -------------------------------------------------------------------- menu */
 
 const menu = $<HTMLElement>('#mobile-menu')
 const menuOpenButton = $<HTMLButtonElement>('#menu-open')
 const menuCloseButton = $<HTMLButtonElement>('#menu-close')
 let menuOpen = false
 let previousFocus: HTMLElement | null = null
-let previousOverflow = ''
 
-function menuFocusables(): HTMLElement[] {
+function focusables(): HTMLElement[] {
   if (!menu) return []
   return $$<HTMLElement>('a[href], button:not([disabled])', menu).filter(
     (element) => element.offsetParent !== null,
@@ -437,7 +70,6 @@ function openMenu(): void {
   if (!menu || !menuOpenButton) return
   menuOpen = true
   previousFocus = document.activeElement as HTMLElement | null
-  previousOverflow = document.body.style.overflow
   menu.hidden = false
   menuOpenButton.setAttribute('aria-expanded', 'true')
   document.body.style.overflow = 'hidden'
@@ -446,15 +78,15 @@ function openMenu(): void {
   document.addEventListener('keydown', onMenuKeydown, true)
 }
 
-function closeMenu(restoreFocus = true): void {
+function closeMenu(restore = true): void {
   if (!menu || !menuOpenButton) return
   menuOpen = false
   menu.hidden = true
   menuOpenButton.setAttribute('aria-expanded', 'false')
-  document.body.style.overflow = previousOverflow
+  document.body.style.overflow = ''
   lenis?.start()
   document.removeEventListener('keydown', onMenuKeydown, true)
-  if (restoreFocus) previousFocus?.focus()
+  if (restore) previousFocus?.focus()
 }
 
 function onMenuKeydown(event: KeyboardEvent): void {
@@ -465,10 +97,10 @@ function onMenuKeydown(event: KeyboardEvent): void {
     return
   }
   if (event.key !== 'Tab') return
-  const focusables = menuFocusables()
-  if (focusables.length === 0) return
-  const first = focusables[0]
-  const last = focusables[focusables.length - 1]
+  const list = focusables()
+  if (list.length === 0) return
+  const first = list[0]
+  const last = list[list.length - 1]
   const active = document.activeElement
   if (event.shiftKey && (active === first || !menu?.contains(active))) {
     event.preventDefault()
@@ -482,23 +114,93 @@ function onMenuKeydown(event: KeyboardEvent): void {
 menuOpenButton?.addEventListener('click', openMenu)
 menuCloseButton?.addEventListener('click', () => closeMenu())
 
-/* ---------------------------------------------------------------- missions */
+/* --------------------------------------------------------------- navigation */
+
+function headerOffset(): number {
+  return window.innerWidth < 768 ? 58 : 64
+}
+
+function scrollToSection(id: string): void {
+  const target = document.getElementById(id)
+  if (!target) return
+  const y = target.getBoundingClientRect().top + window.scrollY - headerOffset()
+  if (lenis) {
+    lenis.scrollTo(Math.max(0, y), { duration: 1.05 })
+  } else {
+    window.scrollTo({ top: Math.max(0, y), behavior: reduced ? 'auto' : 'smooth' })
+  }
+}
+
+document.addEventListener('click', (event) => {
+  const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href^="#"]')
+  if (!link) return
+  const id = link.getAttribute('href')?.slice(1)
+  if (!id || !document.getElementById(id)) return
+  event.preventDefault()
+  if (menuOpen) closeMenu(false)
+  scrollToSection(id)
+  const heading = document.getElementById(id)?.querySelector<HTMLElement>('h1, h2')
+  window.setTimeout(() => {
+    heading?.setAttribute('tabindex', '-1')
+    heading?.focus({ preventScroll: true })
+  }, 700)
+})
+
+document.addEventListener('keydown', (event) => {
+  if (menuOpen) return
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('input, textarea, select, [contenteditable="true"], [role="radio"]')) return
+
+  const active = SECTIONS.findIndex((id) => {
+    const el = document.getElementById(id)
+    if (!el) return false
+    const rect = el.getBoundingClientRect()
+    return rect.top <= headerOffset() + 8 && rect.bottom > headerOffset() + 8
+  })
+  const index = active === -1 ? 0 : active
+
+  if (event.key === 'PageDown' || event.key === 'ArrowDown') {
+    event.preventDefault()
+    scrollToSection(SECTIONS[Math.min(SECTIONS.length - 1, index + 1)])
+  } else if (event.key === 'PageUp' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    scrollToSection(SECTIONS[Math.max(0, index - 1)])
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    scrollToSection('hero')
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    scrollToSection('contact')
+  }
+})
+
+/* The mobile track sheet covers the page, so it owns the scroll while open. */
+document.addEventListener('celestrac:sheet', (event) => {
+  const open = Boolean((event as CustomEvent<{ open: boolean }>).detail?.open)
+  // Lock the document element too: body overflow alone does not stop the page
+  // scrolling when the root's own overflow is set.
+  document.documentElement.style.overflow = open ? 'hidden' : ''
+  document.body.style.overflow = open ? 'hidden' : ''
+  if (open) lenis?.stop()
+  else lenis?.start()
+})
+
+/* ----------------------------------------------------------------- missions */
 
 const modeButtons = $$<HTMLButtonElement>('[data-mode]')
-const modePanels = $$<HTMLElement>('.mission-panel')
+const modeLabel = $<HTMLElement>('#mode-label')
 
 function selectMode(mode: MissionMode, focus = false): void {
   modeButtons.forEach((button) => {
     const checked = button.dataset.mode === mode
-    button.classList.toggle('is-checked', checked)
+    button.classList.toggle('is-on', checked)
     button.setAttribute('aria-checked', String(checked))
     button.tabIndex = checked ? 0 : -1
     if (checked && focus) button.focus()
   })
-  modePanels.forEach((panel) => {
-    panel.hidden = panel.id !== `panel-${mode}`
-  })
-  scene?.setMode(mode, reduced)
+  if (modeLabel) modeLabel.textContent = mode
+  scene?.setMode(mode)
 }
 
 modeButtons.forEach((button) => {
@@ -522,7 +224,7 @@ modeButtons.forEach((button, index) => {
   })
 })
 
-/* -------------------------------------------------------------------- form */
+/* --------------------------------------------------------------------- form */
 
 const form = $<HTMLFormElement>('#briefing-form')
 const fieldsWrap = $<HTMLElement>('#briefing-fields')
@@ -530,48 +232,37 @@ const submitButton = $<HTMLButtonElement>('.form__submit')
 const formStatus = $<HTMLElement>('#form-status')
 const formStatusText = $<HTMLElement>('#form-status-text')
 const retryButton = $<HTMLButtonElement>('#form-retry')
-const hudLat = $('#hud-lat')
-const hudLon = $('#hud-lon')
-const hudTracks = $('#hud-tracks')
-const hudUtc = $('#hud-utc')
 
 interface FieldSpec {
   input: HTMLInputElement | HTMLTextAreaElement | null
   error: HTMLElement | null
-  message: string
   validate: (value: string) => string | null
 }
 
 const required = (message: string) => (value: string) => (value.trim() ? null : message)
-const emailValid = (value: string) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 
 const fieldSpecs: FieldSpec[] = [
   {
     input: $<HTMLInputElement>('#field-name'),
     error: $<HTMLElement>('#error-name'),
-    message: 'Enter your name.',
     validate: required('Enter your name.'),
   },
   {
     input: $<HTMLInputElement>('#field-org'),
     error: $<HTMLElement>('#error-org'),
-    message: 'Enter your organization.',
     validate: required('Enter your organization.'),
   },
   {
     input: $<HTMLInputElement>('#field-email'),
     error: $<HTMLElement>('#error-email'),
-    message: 'Enter your work email.',
     validate: (value) => {
       if (!value.trim()) return 'Enter your work email.'
-      return emailValid(value) ? null : 'Enter a valid work email.'
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? null : 'Enter a valid work email.'
     },
   },
   {
     input: $<HTMLTextAreaElement>('#field-message'),
     error: $<HTMLElement>('#error-message'),
-    message: 'Tell us what you need to see.',
     validate: required('Tell us what you need to see.'),
   },
 ]
@@ -607,7 +298,21 @@ function resetStatus(): void {
   if (retryButton) retryButton.hidden = true
 }
 
-function finishError(): void {
+function finishUnavailable(): void {
+  formError = true
+  sending = false
+  form?.removeAttribute('aria-busy')
+  form?.classList.add('is-error')
+  if (submitButton) {
+    submitButton.disabled = false
+    submitButton.textContent = 'Request a briefing'
+  }
+  showStatus('Requests are not being delivered right now. Nothing was sent.', false)
+}
+
+function finishError(
+  message = 'Request not sent. Check the connection and try again.',
+): void {
   formError = true
   sending = false
   form?.removeAttribute('aria-busy')
@@ -617,7 +322,7 @@ function finishError(): void {
     submitButton.disabled = false
     submitButton.textContent = 'Request a briefing'
   }
-  showStatus('Request not sent. Check the connection and try again.', true)
+  showStatus(message, true)
 }
 
 function finishSuccess(): void {
@@ -654,30 +359,24 @@ async function sendBriefing(): Promise<void> {
   form?.classList.remove('is-error', 'is-sent')
   if (submitButton) {
     submitButton.disabled = true
-    submitButton.textContent = 'Sending...'
+    submitButton.textContent = 'Sending'
   }
   showStatus('Sending request.', false)
 
   const payload = {
-    name: $('#field-name') instanceof HTMLInputElement ? ($('#field-name') as HTMLInputElement).value.trim() : '',
-    organization:
-      $('#field-org') instanceof HTMLInputElement ? ($('#field-org') as HTMLInputElement).value.trim() : '',
-    email:
-      $('#field-email') instanceof HTMLInputElement ? ($('#field-email') as HTMLInputElement).value.trim() : '',
-    message:
-      $('#field-message') instanceof HTMLTextAreaElement
-        ? ($('#field-message') as HTMLTextAreaElement).value.trim()
-        : '',
+    name: ($<HTMLInputElement>('#field-name')?.value ?? '').trim(),
+    org: ($<HTMLInputElement>('#field-org')?.value ?? '').trim(),
+    email: ($<HTMLInputElement>('#field-email')?.value ?? '').trim(),
+    message: ($<HTMLTextAreaElement>('#field-message')?.value ?? '').trim(),
+    company_url: ($<HTMLInputElement>('#field-company-url')?.value ?? '').trim(),
   }
 
-  const endpoint = (import.meta.env.VITE_BRIEFING_ENDPOINT ?? '').trim()
+  const endpoint = (import.meta.env.VITE_BRIEFING_ENDPOINT ?? '/api/briefing').trim()
 
-  if (!endpoint) {
-    if (import.meta.env.DEV) {
-      window.setTimeout(finishSuccess, 600)
-    } else {
-      finishError()
-    }
+  // Local development without the function running: keep the flow testable and
+  // never let this path exist in a production build.
+  if (import.meta.env.DEV && !import.meta.env.VITE_BRIEFING_ENDPOINT) {
+    window.setTimeout(() => finishUnavailable(), 500)
     return
   }
 
@@ -690,10 +389,18 @@ async function sendBriefing(): Promise<void> {
       body: JSON.stringify(payload),
       signal: controller.signal,
     })
+    if (response.status === 503) {
+      finishUnavailable()
+      return
+    }
+    if (response.status === 429) {
+      finishError('Too many requests from this connection. Try again shortly.')
+      return
+    }
     if (!response.ok) throw new Error(`Request failed with ${response.status}`)
     finishSuccess()
   } catch (error) {
-    console.warn('Briefing request failed.', error)
+    if (import.meta.env.DEV) console.warn('Briefing request failed.', error)
     finishError()
   } finally {
     window.clearTimeout(timeout)
@@ -720,94 +427,277 @@ retryButton?.addEventListener('click', () => {
   void sendBriefing()
 })
 
-/* --------------------------------------------------------------------- hud */
+/* ------------------------------------------------------------------- orrery */
 
-function updateClock(): void {
-  if (!hudUtc) return
-  const now = new Date()
-  hudUtc.textContent = `${String(now.getUTCHours()).padStart(2, '0')}:${String(
-    now.getUTCMinutes(),
-  ).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}Z`
+let orreryReady = false
+function initOrreryOnce(): void {
+  if (orreryReady) return
+  const frame = document.getElementById('orrery-frame')
+  if (!frame) return
+  orreryReady = true
+  void import('./orrery').then(({ initOrrery }) => {
+    initOrrery()
+  })
 }
-updateClock()
-window.setInterval(updateClock, 1000)
 
-window.setInterval(() => {
-  if (!scene) return
-  const readout = scene.readout()
-  if (hudLat) hudLat.textContent = readout.lat
-  if (hudLon) hudLon.textContent = readout.lon
-  if (hudTracks) hudTracks.textContent = readout.tracks
-}, 350)
-
-/* ----------------------------------------------------------------- reduced */
-
-function initReducedSections(): void {
-  const sections = $$<HTMLElement>('[data-chapter]')
-  let ticking = false
-  const update = (): void => {
-    ticking = false
-    const mid = window.innerHeight * 0.42
-    let active = 0
-    sections.forEach((section) => {
-      if (section.getBoundingClientRect().top <= mid) {
-        active = Number(section.dataset.chapter ?? 0)
-      }
-    })
-    scene?.setChapter(active)
-    setRail(active === 0 ? 0 : Math.min(5, active))
-    setMeter(1, Math.min(5, active))
-  }
-  window.addEventListener(
-    'scroll',
-    () => {
-      if (ticking) return
-      ticking = true
-      requestAnimationFrame(update)
+if ('IntersectionObserver' in window) {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          initOrreryOnce()
+          observer.disconnect()
+        }
+      })
     },
-    { passive: true },
+    { rootMargin: '320px 0px' },
   )
-  update()
+  const frame = document.getElementById('orrery-frame')
+  if (frame) observer.observe(frame)
+} else {
+  initOrreryOnce()
 }
 
-/* -------------------------------------------------------------------- boot */
+/* -------------------------------------------------------------------- scene */
+
+function stageTrigger(selector: string, view: ViewKey): void {
+  const el = document.querySelector(selector)
+  if (!el) return
+  ScrollTrigger.create({
+    trigger: el,
+    start: 'top top',
+    end: 'bottom bottom',
+    scrub: true,
+    onUpdate: (self) => scene?.setView(view, self.progress),
+    onRefresh: (self) => scene?.setView(view, self.progress),
+  })
+}
+
+function sectionTrigger(selector: string, id: string, reading: boolean): void {
+  const el = document.querySelector(selector)
+  if (!el) return
+  ScrollTrigger.create({
+    trigger: el,
+    start: 'top 60%',
+    end: 'bottom 40%',
+    onEnter: () => {
+      setNav(id)
+      setReading(reading)
+      if (reading) scene?.setView('quiet', 0.4)
+    },
+    onEnterBack: () => {
+      setNav(id)
+      setReading(reading)
+      if (reading) scene?.setView('quiet', 0.4)
+    },
+    onLeave: () => setReading(false),
+  })
+}
+
+function setupTriggers(): void {
+  if (triggersReady) return
+  triggersReady = true
+
+  stageTrigger('#hero', 'hero')
+  stageTrigger('#tycho', 'hardware')
+
+  const hardware = document.querySelector('#tycho')
+  if (hardware) {
+    ScrollTrigger.create({
+      trigger: hardware,
+      start: 'top top',
+      end: 'bottom bottom',
+      scrub: true,
+      onUpdate: (self) => {
+        const p = self.progress
+        // Fade in only: the object must still be there at the end of the pin,
+        // where the next section takes over.
+        const weight = Math.min(1, p / 0.05)
+        const explode = smooth((p - 0.12) / 0.62)
+        scene?.setView('hardware', p)
+        scene?.setHardware(weight, explode)
+      },
+      onRefresh: (self) => {
+        const p = self.progress
+        scene?.setHardware(Math.min(1, p / 0.05), smooth((p - 0.12) / 0.62))
+      },
+    })
+  }
+
+  // Mission overlay: fades in with the overlay window, camera settles on the globe.
+  const windowEl = document.querySelector('.missions__window')
+  if (windowEl) {
+    ScrollTrigger.create({
+      trigger: windowEl,
+      start: 'top bottom',
+      end: 'bottom top',
+      scrub: true,
+      onUpdate: (self) => {
+        const p = self.progress
+        scene?.setOverlay(smooth(p / 0.35) * smooth((1 - p) / 0.25))
+      },
+      onRefresh: () => scene?.setOverlay(0),
+    })
+  }
+
+  sectionTrigger('#orrery', 'orrery', true)
+  sectionTrigger('#products', 'products', true)
+  sectionTrigger('#missions', 'missions', false)
+  sectionTrigger('#contact', 'contact', true)
+
+  if (!reduced) {
+    // The one scan wipe, hero to Orrery: a sweep that becomes the picture.
+    gsap.fromTo(
+      '#orrery',
+      { clipPath: 'inset(0% 0% 100% 0%)' },
+      {
+        clipPath: 'inset(0% 0% 0% 0%)',
+        ease: 'none',
+        scrollTrigger: { trigger: '#orrery', start: 'top bottom', end: 'top 42%', scrub: 0.6 },
+      },
+    )
+
+    // Headline masks. One element at a time, body copy never moves.
+    $$<HTMLElement>('h2').forEach((heading) => {
+      gsap.fromTo(
+        heading,
+        { clipPath: 'inset(0% 0% 100% 0%)' },
+        {
+          clipPath: 'inset(0% 0% -12% 0%)',
+          duration: 0.9,
+          ease: 'power3.out',
+          scrollTrigger: { trigger: heading, start: 'top 88%', once: true },
+        },
+      )
+    })
+  }
+
+  ScrollTrigger.refresh()
+}
+
+function startDebug(): void {
+  const box = document.createElement('div')
+  box.id = 'debug'
+  box.setAttribute('aria-hidden', 'true')
+  document.body.appendChild(box)
+  const update = (): void => {
+    if (!scene) return
+    const stats = scene.stats()
+    box.textContent = `calls ${stats.calls} · tris ${Math.round(stats.triangles / 1000)}k · ${stats.ms.toFixed(1)} ms · ${stats.tier}`
+    box.classList.toggle('is-over', stats.calls > 100)
+  }
+  update()
+  window.setInterval(update, 250)
+}
+
+function loadScene(): void {
+  const canvas = document.getElementById('stage-canvas')
+  if (!(canvas instanceof HTMLCanvasElement)) return
+  void import('./scene/scene')
+    .then(({ createScene }) => {
+      const created = createScene(canvas, reduced)
+      if (!created) return
+      scene = created
+      root.classList.add('has-gl')
+      created.resize()
+      created.setMode('civil')
+      setupTriggers()
+
+      // Dropped from production builds entirely.
+      if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('debug') === '1') {
+        startDebug()
+      }
+
+      if (reduced) initReducedScene()
+    })
+    .catch((error) => console.warn('Scene unavailable; the poster frame stays.', error))
+}
+
+/* Reduced motion: static poses, no pins, no flow. */
+function initReducedScene(): void {
+  const stages: Array<[string, ViewKey]> = [
+    ['#hero', 'hero'],
+    ['#orrery', 'quiet'],
+    ['#tycho', 'hardware'],
+    ['#products', 'quiet'],
+    ['#missions', 'missions'],
+    ['#contact', 'quiet'],
+  ]
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return
+        const id = entry.target.id
+        if (id === 'hero') scene?.setView('hero', 0.35)
+        if (id === 'orrery' || id === 'products') {
+          scene?.setHardware(0, 0)
+          scene?.setView('quiet', 0.5)
+        }
+        if (id === 'tycho') {
+          scene?.setView('hardware', 0.5)
+          scene?.setHardware(1, 1)
+        }
+        if (id === 'missions') {
+          scene?.setHardware(0, 0)
+          scene?.setView('missions', 0.4)
+          scene?.setOverlay(1)
+        }
+        if (id === 'contact') {
+          scene?.setOverlay(0)
+          scene?.setView('quiet', 0.6)
+        }
+      })
+    },
+    { threshold: 0.45 },
+  )
+  stages.forEach(([selector]) => {
+    const el = document.querySelector(selector)
+    if (el) observer.observe(el)
+  })
+  scene?.setHardware(0, 0)
+  scene?.setView('hero', 0.35)
+}
+
+/* ------------------------------------------------------------------- boot */
+
+function bootMotion(): void {
+  if (reduced) {
+    setReading(false)
+    return
+  }
+
+  gsap.set('.hero__title .line > span', { yPercent: 105 })
+  requestAnimationFrame(() => {
+    gsap.to('.hero__title .line > span', {
+      yPercent: 0,
+      duration: 1.05,
+      stagger: 0.08,
+      ease: 'expo.out',
+      delay: 0.12,
+    })
+  })
+
+  const finePointer = window.matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)')
+    .matches
+  if (!finePointer) return
+
+  lenis = new Lenis({ lerp: 0.1 })
+  lenis.on('scroll', ScrollTrigger.update)
+  gsap.ticker.add((time) => {
+    lenis?.raf(time * 1000)
+  })
+  gsap.ticker.lagSmoothing(0)
+}
 
 async function boot(): Promise<void> {
   try {
     await document.fonts.ready
   } catch {
-    // Fonts are local; continue with the fallback metrics.
+    // Fonts are local; continue with fallback metrics.
   }
 
-  if (!scene) {
-    updateChrome(0)
-    return
-  }
-
-  if (reduced) {
-    root.classList.add('motion-ready')
-    initReducedSections()
-    return
-  }
-
-  try {
-    const linesByChapter = chapters.map((chapter) =>
-      $$<HTMLElement>('[data-split]', chapter).flatMap((heading) => splitHeading(heading)),
-    )
-    buildMotion(linesByChapter)
-    ScrollTrigger.refresh()
-  } catch (error) {
-    console.warn('Motion setup failed; falling back to stacked chapters.', error)
-    ScrollTrigger.getAll().forEach((trigger) => trigger.kill())
-    lenis?.destroy()
-    lenis = null
-    root.classList.remove('has-gl', 'motion-ready')
-    restoreHeadings()
-    scene?.destroy()
-    scene = null
-    pinTrigger = null
-    masterTimeline = null
-  }
+  bootMotion()
+  requestAnimationFrame(() => window.setTimeout(loadScene, 0))
 }
 
 void boot()
@@ -823,30 +713,8 @@ window.addEventListener('resize', () => {
 
 if (import.meta.env.DEV) {
   ;(window as unknown as Record<string, unknown>).__celestracDebug = {
-    pinTrigger: () => pinTrigger,
-    timeline: () => masterTimeline,
-    chrome: (progress: number) => updateChrome(progress),
     scene: () => scene,
-    lenis: () => lenis,
     refresh: () => ScrollTrigger.refresh(),
+    mode: (mode: MissionMode) => selectMode(mode),
   }
-}
-
-// Read-only build telemetry, useful when checking tier behaviour.
-try {
-  Object.defineProperty(window, '__celestrac', {
-    value: {
-      get tier() {
-        return scene?.tier ?? 'none'
-      },
-      get chapter() {
-        return currentChapter()
-      },
-      get tracks() {
-        return scene?.readout().tracks ?? '000'
-      },
-    },
-  })
-} catch {
-  // Ignore engines that refuse the property.
 }

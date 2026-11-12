@@ -5,13 +5,12 @@ import {
   CircleGeometry,
   Color,
   DoubleSide,
-  Euler,
   Float32BufferAttribute,
   Group,
   Line,
   LineBasicMaterial,
-  Matrix4,
   Mesh,
+  MeshBasicMaterial,
   Points,
   ShaderMaterial,
   Sprite,
@@ -20,34 +19,62 @@ import {
 } from 'three'
 import { mulberry } from './noise'
 
-const GLOBE_RADIUS = 1.55
+const MU = 398_600.4418 // km^3/s^2
+const EARTH_RADIUS_KM = 6_371
+const SCENE_RADIUS = 1.55
+const DISPLAY_TIME = 140 // scene seconds per real second
 
-interface OrbitConfig {
-  rx: number
-  ry: number
-  tilt: number
-  node: number
-  matrix: Matrix4
+interface Family {
+  id: string
+  altitude: number
+  inclination: number
+  count: number
+  lineOpacity: number
 }
 
-interface Satellite {
-  orbit: number
-  phase: number
-  speed: number
-  color: Color
-  size: number
+/* Real families: sun-synchronous LEO, ISS-like LEO, GNSS-like MEO, GEO. */
+const FAMILIES: Family[] = [
+  { id: 'sso', altitude: 600, inclination: 98, count: 6, lineOpacity: 0.3 },
+  { id: 'leo', altitude: 420, inclination: 51.6, count: 4, lineOpacity: 0.22 },
+  { id: 'meo', altitude: 20_200, inclination: 55, count: 5, lineOpacity: 0.18 },
+  { id: 'geo', altitude: 35_786, inclination: 0.4, count: 3, lineOpacity: 0.3 },
+]
+
+/*
+ * shortcut: altitude is compressed logarithmically so GEO and LEO share one
+ * frame. Keplerian periods, inclinations and ground tracks stay real; the
+ * radial distances are display-only.
+ */
+function displayRadius(altitudeKm: number): number {
+  return SCENE_RADIUS * (1 + 0.55 * Math.log10(1 + altitudeKm / 250))
+}
+
+function orbitalPosition(
+  radius: number,
+  inclinationDeg: number,
+  raan: number,
+  anomaly: number,
+  out: Vector3,
+): Vector3 {
+  const inc = (inclinationDeg * Math.PI) / 180
+  const x = Math.cos(anomaly) * radius
+  const y = Math.sin(anomaly) * radius
+  const yi = y * Math.cos(inc)
+  const zi = y * Math.sin(inc)
+  out.set(x * Math.cos(raan) + zi * Math.sin(raan), yi, -x * Math.sin(raan) + zi * Math.cos(raan))
+  return out
 }
 
 const SAT_VERTEX = /* glsl */ `
   uniform float uDpr;
+  uniform float uOpacity;
   attribute vec3 aColor;
   attribute float aSize;
   varying vec3 vColor;
-
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = aSize * uDpr * (18.0 / max(0.1, -mv.z));
+    gl_PointSize = aSize * uDpr * (16.0 / max(0.1, -mv.z));
     vColor = aColor;
   }
 `
@@ -55,50 +82,25 @@ const SAT_VERTEX = /* glsl */ `
 const SAT_FRAGMENT = /* glsl */ `
   uniform float uOpacity;
   varying vec3 vColor;
-
   void main() {
     vec2 p = gl_PointCoord - 0.5;
     float d = length(p) * 2.0;
     if (d > 1.0) discard;
-    float alpha = smoothstep(1.0, 0.18, d) * uOpacity;
-    gl_FragColor = vec4(vColor, alpha);
-    #include <colorspace_fragment>
-  }
-`
-
-const FOOTPRINT_VERTEX = /* glsl */ `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-
-const FOOTPRINT_FRAGMENT = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uOpacity;
-  varying vec2 vUv;
-
-  void main() {
-    float d = length(vUv - 0.5) * 2.0;
-    if (d > 1.0) discard;
-    float edge = smoothstep(1.0, 0.9, d) * smoothstep(0.74, 1.0, d);
-    float fill = smoothstep(1.0, 0.1, d) * 0.14;
-    gl_FragColor = vec4(uColor, (edge * 0.62 + fill) * uOpacity);
+    gl_FragColor = vec4(vColor, smoothstep(1.0, 0.15, d) * uOpacity);
     #include <colorspace_fragment>
   }
 `
 
 function reticleTexture(): CanvasTexture {
   const canvas = document.createElement('canvas')
-  canvas.width = 64
-  canvas.height = 64
+  canvas.width = 48
+  canvas.height = 48
   const ctx = canvas.getContext('2d')
   if (ctx) {
     ctx.strokeStyle = '#ffffff'
     ctx.lineWidth = 2
-    const inset = 10
-    const arm = 10
+    const inset = 7
+    const arm = 7
     const corner = (x: number, y: number, dx: number, dy: number) => {
       ctx.beginPath()
       ctx.moveTo(x + dx * arm, y)
@@ -107,103 +109,108 @@ function reticleTexture(): CanvasTexture {
       ctx.stroke()
     }
     corner(inset, inset, 1, 1)
-    corner(64 - inset, inset, -1, 1)
-    corner(inset, 64 - inset, 1, -1)
-    corner(64 - inset, 64 - inset, -1, -1)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(31, 31, 2, 2)
+    corner(48 - inset, inset, -1, 1)
+    corner(inset, 48 - inset, 1, -1)
+    corner(48 - inset, 48 - inset, -1, -1)
   }
   const texture = new CanvasTexture(canvas)
-  texture.needsUpdate = true
   return texture
+}
+
+interface Satellite {
+  family: Family
+  radius: number
+  raan: number
+  phase: number
+  rate: number
 }
 
 export class Orbits {
   readonly group = new Group()
-  private readonly configs: OrbitConfig[] = []
-  private readonly lines: Line[] = []
   private readonly satellites: Satellite[] = []
-  private readonly satPoints: Points
-  private readonly satGeometry: BufferGeometry
+  private readonly satGeometry = new BufferGeometry()
   private readonly satMaterial: ShaderMaterial
+  private readonly satPositions: Float32Array
   private readonly reticles: Sprite[] = []
-  private readonly reticleTexture: CanvasTexture
-  private readonly highlight: number
+  private readonly fallbackReticleTexture = reticleTexture()
   private readonly groundTrack: Line
-  private readonly groundPositions: Float32Array
-  private readonly footprint: { mesh: Mesh; material: ShaderMaterial }
-  private readonly baseOpacities: number[] = []
-  private highlightPhase = 0
+  private readonly footprint: Mesh
+  private readonly highlightRadius: number
+  private readonly highlightInclination: number
+  private readonly highlightRaan: number
+  private readonly lineMaterials: LineBasicMaterial[] = []
   private groupOpacity = 1
-  private loopValue: number | null = null
-  private footprintStrength = 1
 
-  constructor(orbitCount: number, satelliteCount: number, reticleCount: number, dpr: number) {
-    this.highlight = Math.min(2, orbitCount - 1)
+  constructor(reticles: number, dpr: number) {
     const random = mulberry(4711)
-
-    for (let i = 0; i < orbitCount; i += 1) {
-      const rx = 2.0 + random() * 1.35
-      const ry = 1.85 + random() * 1.2
-      const tilt = (random() - 0.5) * 1.5
-      const node = random() * Math.PI * 2
-      const matrix = new Matrix4().makeRotationFromEuler(new Euler(tilt, node, 0, 'XYZ'))
-      this.configs.push({ rx, ry, tilt, node, matrix })
-    }
-
-    for (let i = 0; i < orbitCount; i += 1) {
-      const config = this.configs[i]
-      const isHighlight = i === this.highlight
-      const values: number[] = []
-      const steps = 192
-      for (let s = 0; s <= steps; s += 1) {
-        const u = (s / steps) * Math.PI * 2
-        const point = new Vector3(
-          Math.cos(u) * config.rx,
-          Math.sin(u) * config.ry,
-          0,
-        ).applyMatrix4(config.matrix)
-        values.push(point.x, point.y, point.z)
-      }
-      const geometry = new BufferGeometry()
-      geometry.setAttribute('position', new Float32BufferAttribute(new Float32Array(values), 3))
-      const material = new LineBasicMaterial({
-        color: isHighlight ? 0xecb44d : 0x6fb8e6,
-        transparent: true,
-        opacity: isHighlight ? 0.66 : 0.17 + i * 0.012,
-        depthWrite: false,
-      })
-      const line = new Line(geometry, material)
-      line.frustumCulled = false
-      this.baseOpacities.push(material.opacity)
-      this.lines.push(line)
-      this.group.add(line)
-    }
-
-    const positions = new Float32Array(satelliteCount * 3)
-    const colors = new Float32Array(satelliteCount * 3)
-    const sizes = new Float32Array(satelliteCount)
     const data = new Color(0x6fb8e6)
     const action = new Color(0xecb44d)
+    const tmp = new Vector3()
 
-    for (let i = 0; i < satelliteCount; i += 1) {
-      const orbit = i === 0 ? this.highlight : Math.floor(random() * orbitCount)
-      const color = orbit === this.highlight ? action : data
-      this.satellites.push({
-        orbit,
-        phase: i === 0 ? 0.6 : random() * Math.PI * 2,
-        speed: 0.055 + random() * 0.075,
-        color,
-        size: orbit === this.highlight ? 3.1 : 2.1,
+    FAMILIES.forEach((family) => {
+      const radius = displayRadius(family.altitude)
+      const raan = random() * Math.PI * 2
+      const points: number[] = []
+      const steps = 168
+      for (let i = 0; i <= steps; i += 1) {
+        orbitalPosition(radius, family.inclination, raan, (i / steps) * Math.PI * 2, tmp)
+        points.push(tmp.x, tmp.y, tmp.z)
+      }
+      const geometry = new BufferGeometry()
+      geometry.setAttribute('position', new Float32BufferAttribute(new Float32Array(points), 3))
+      const material = new LineBasicMaterial({
+        color: 0x6fb8e6,
+        transparent: true,
+        opacity: family.lineOpacity,
+        depthWrite: false,
       })
-      colors[i * 3] = color.r
-      colors[i * 3 + 1] = color.g
-      colors[i * 3 + 2] = color.b
-      sizes[i] = this.satellites[i].size
-    }
+      this.lineMaterials.push(material)
+      const line = new Line(geometry, material)
+      line.frustumCulled = false
+      this.group.add(line)
 
-    this.satGeometry = new BufferGeometry()
-    this.satGeometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
+      // A second plane per family, offset in RAAN, reads as a shell not a ring.
+      const second = new Line(
+        geometry.clone(),
+        new LineBasicMaterial({
+          color: 0x6fb8e6,
+          transparent: true,
+          opacity: family.lineOpacity * 0.62,
+          depthWrite: false,
+        }),
+      )
+      this.lineMaterials.push(second.material as LineBasicMaterial)
+      second.rotation.y = 1.1
+      second.frustumCulled = false
+      this.group.add(second)
+
+      for (let i = 0; i < family.count; i += 1) {
+        this.satellites.push({
+          family,
+          radius,
+          raan: raan + (i % 2 === 0 ? 0 : 1.1),
+          phase: random() * Math.PI * 2,
+          rate: Math.sqrt(MU / Math.pow(EARTH_RADIUS_KM + family.altitude, 3)),
+        })
+      }
+    })
+
+    this.highlightRadius = displayRadius(FAMILIES[0].altitude)
+    this.highlightInclination = FAMILIES[0].inclination
+    this.highlightRaan = this.satellites[0].raan
+
+    this.satPositions = new Float32Array(this.satellites.length * 3)
+    const colors = new Float32Array(this.satellites.length * 3)
+    const sizes = new Float32Array(this.satellites.length)
+    this.satellites.forEach((_, index) => {
+      const color = index === 0 ? action : data
+      colors[index * 3] = color.r
+      colors[index * 3 + 1] = color.g
+      colors[index * 3 + 2] = color.b
+      sizes[index] = index === 0 ? 3.4 : 2.2
+    })
+
+    this.satGeometry.setAttribute('position', new Float32BufferAttribute(this.satPositions, 3))
     this.satGeometry.setAttribute('aColor', new Float32BufferAttribute(colors, 3))
     this.satGeometry.setAttribute('aSize', new Float32BufferAttribute(sizes, 1))
     this.satMaterial = new ShaderMaterial({
@@ -214,59 +221,71 @@ export class Orbits {
       depthWrite: false,
       blending: AdditiveBlending,
     })
-    this.satPoints = new Points(this.satGeometry, this.satMaterial)
-    this.satPoints.frustumCulled = false
-    this.group.add(this.satPoints)
+    const satPoints = new Points(this.satGeometry, this.satMaterial)
+    satPoints.frustumCulled = false
+    this.group.add(satPoints)
 
-    this.reticleTexture = reticleTexture()
-    for (let i = 0; i < reticleCount; i += 1) {
+    for (let i = 0; i < reticles; i += 1) {
       const sprite = new Sprite(
         new SpriteMaterial({
-          map: this.reticleTexture,
+          map: this.fallbackReticleTexture,
           color: 0x6fb8e6,
           transparent: true,
-          opacity: 0.5,
+          opacity: 0.42,
           depthWrite: false,
           blending: AdditiveBlending,
         }),
       )
-      sprite.scale.setScalar(0.17)
-      sprite.renderOrder = 2
+      sprite.scale.setScalar(0.13)
       this.reticles.push(sprite)
       this.group.add(sprite)
     }
 
-    this.groundPositions = new Float32Array(72 * 3)
+    // The highlighted track's real ground track, projected from its orbit.
+    const trackPoints: number[] = []
+    const surface = SCENE_RADIUS * 1.012
+    for (let i = 0; i <= 128; i += 1) {
+      orbitalPosition(
+        this.highlightRadius,
+        this.highlightInclination,
+        this.highlightRaan,
+        (i / 128) * Math.PI * 2,
+        tmp,
+      )
+        .normalize()
+        .multiplyScalar(surface)
+      trackPoints.push(tmp.x, tmp.y, tmp.z)
+    }
     const trackGeometry = new BufferGeometry()
-    trackGeometry.setAttribute('position', new Float32BufferAttribute(this.groundPositions, 3))
+    trackGeometry.setAttribute(
+      'position',
+      new Float32BufferAttribute(new Float32Array(trackPoints), 3),
+    )
     this.groundTrack = new Line(
       trackGeometry,
       new LineBasicMaterial({
         color: 0xecb44d,
         transparent: true,
-        opacity: 0.48,
+        opacity: 0.5,
         depthWrite: false,
       }),
     )
     this.groundTrack.frustumCulled = false
     this.group.add(this.groundTrack)
 
-    const footprintMaterial = new ShaderMaterial({
-      vertexShader: FOOTPRINT_VERTEX,
-      fragmentShader: FOOTPRINT_FRAGMENT,
-      uniforms: {
-        uColor: { value: action.clone() },
-        uOpacity: { value: 0.75 },
-      },
-      transparent: true,
-      side: DoubleSide,
-      blending: AdditiveBlending,
-      depthWrite: false,
-    })
-    const footprint = new Mesh(new CircleGeometry(0.26, 48), footprintMaterial)
-    footprint.frustumCulled = false
-    this.footprint = { mesh: footprint, material: footprintMaterial }
-    this.group.add(footprint)
+    this.footprint = new Mesh(
+      new CircleGeometry(0.2, 48),
+      new MeshBasicMaterial({
+        color: 0xecb44d,
+        transparent: true,
+        opacity: 0.1,
+        side: DoubleSide,
+        depthWrite: false,
+        blending: AdditiveBlending,
+      }),
+    )
+    this.footprint.frustumCulled = false
+    this.group.add(this.footprint)
 
     this.update(0)
   }
@@ -275,58 +294,38 @@ export class Orbits {
     this.satMaterial.uniforms.uDpr.value = dpr
   }
 
-  setCount(orbitLimit: number, satelliteLimit: number, reticleLimit: number): void {
-    this.lines.forEach((line, index) => {
-      line.visible = index < orbitLimit
-    })
-    this.satGeometry.setDrawRange(0, Math.min(satelliteLimit, this.satellites.length))
+  setCount(reticleCount: number): void {
     this.reticles.forEach((sprite, index) => {
-      sprite.visible = index < reticleLimit
+      sprite.visible = index < reticleCount
     })
-  }
-
-  setLoopProgress(value: number | null): void {
-    this.loopValue = value
-    this.updateLineOpacities()
   }
 
   setOpacity(value: number): void {
     this.groupOpacity = Math.min(1, Math.max(0, value))
-    this.updateLineOpacities()
+    this.group.visible = this.groupOpacity > 0.004
     this.satMaterial.uniforms.uOpacity.value = this.groupOpacity
+    this.lineMaterials.forEach((material, index) => {
+      material.opacity = (index % 2 === 0 ? 0.3 : 0.19) * this.groupOpacity
+    })
     this.reticles.forEach((sprite) => {
-      ;(sprite.material as SpriteMaterial).opacity = 0.5 * this.groupOpacity
+      ;(sprite.material as SpriteMaterial).opacity = 0.42 * this.groupOpacity
     })
-    ;(this.groundTrack.material as LineBasicMaterial).opacity = 0.48 * this.groupOpacity
-    this.footprint.material.uniforms.uOpacity.value =
-      (0.45 + this.footprintStrength * 0.55) * this.groupOpacity
-  }
-
-  private updateLineOpacities(): void {
-    this.lines.forEach((line, index) => {
-      const material = line.material as LineBasicMaterial
-      if (index === this.highlight || this.loopValue === null) {
-        material.opacity = this.baseOpacities[index] * this.groupOpacity
-        return
-      }
-      const lit = index < 4 && index <= Math.floor(this.loopValue * 4)
-      const base = lit
-        ? Math.min(0.7, this.baseOpacities[index] + 0.42)
-        : this.baseOpacities[index]
-      material.opacity = base * this.groupOpacity
-    })
+    ;(this.groundTrack.material as LineBasicMaterial).opacity = 0.5 * this.groupOpacity
+    ;(this.footprint.material as MeshBasicMaterial).opacity = 0.1 * this.groupOpacity
   }
 
   update(time: number): void {
     const positions = this.satGeometry.getAttribute('position') as Float32BufferAttribute
+    const tmp = new Vector3()
 
     this.satellites.forEach((satellite, index) => {
-      const u = satellite.phase + time * satellite.speed
-      const point = this.pointAt(satellite.orbit, u)
-      positions.setXYZ(index, point.x, point.y, point.z)
+      const anomaly = satellite.phase + satellite.rate * time * DISPLAY_TIME
+      orbitalPosition(satellite.radius, satellite.family.inclination, satellite.raan, anomaly, tmp)
+      positions.setXYZ(index, tmp.x, tmp.y, tmp.z)
       if (index === 0) {
-        this.highlightPhase = u
-        this.updateGroundTrack(u)
+        const contact = tmp.clone().normalize().multiplyScalar(SCENE_RADIUS * 1.015)
+        this.footprint.position.copy(contact)
+        this.footprint.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), contact.clone().normalize())
       }
     })
     positions.needsUpdate = true
@@ -335,64 +334,30 @@ export class Orbits {
     this.reticles.forEach((sprite, index) => {
       const satellite = this.satellites[index * step]
       if (!satellite) return
-      const u = satellite.phase + time * satellite.speed
-      const point = this.pointAt(satellite.orbit, u)
-      sprite.position.copy(point)
-    })
-  }
-
-  private pointAt(orbitIndex: number, u: number): Vector3 {
-    const config = this.configs[orbitIndex] ?? this.configs[0]
-    return new Vector3(
-      Math.cos(u) * config.rx,
-      Math.sin(u) * config.ry,
-      0,
-    ).applyMatrix4(config.matrix)
-  }
-
-  private updateGroundTrack(u: number): void {
-    const config = this.configs[this.highlight]
-    const positions = this.groundTrack.geometry.getAttribute('position') as Float32BufferAttribute
-    const count = positions.count
-    for (let i = 0; i < count; i += 1) {
-      const sample = u - 0.85 + (i / (count - 1)) * 1.7
-      const point = new Vector3(
-        Math.cos(sample) * config.rx,
-        Math.sin(sample) * config.ry,
-        0,
+      orbitalPosition(
+        satellite.radius,
+        satellite.family.inclination,
+        satellite.raan,
+        satellite.phase + satellite.rate * time * DISPLAY_TIME,
+        tmp,
       )
-        .applyMatrix4(config.matrix)
-        .normalize()
-        .multiplyScalar(GLOBE_RADIUS * 1.012)
-      positions.setXYZ(i, point.x, point.y, point.z)
-    }
-    positions.needsUpdate = true
-
-    const contact = this.pointAt(this.highlight, this.highlightPhase)
-      .normalize()
-      .multiplyScalar(GLOBE_RADIUS * 1.014)
-    this.footprint.mesh.position.copy(contact)
-    this.footprint.mesh.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), contact.clone().normalize())
-  }
-
-  setFootprintStrength(value: number): void {
-    this.footprintStrength = value
-    this.footprint.material.uniforms.uOpacity.value =
-      (0.45 + value * 0.55) * this.groupOpacity
+      sprite.position.copy(tmp)
+    })
   }
 
   dispose(): void {
-    this.lines.forEach((line) => {
-      line.geometry.dispose()
-      ;(line.material as LineBasicMaterial).dispose()
+    this.group.traverse((object) => {
+      if (object instanceof Mesh || object instanceof Line || object instanceof Points) {
+        object.geometry.dispose()
+        const material = object.material
+        if (Array.isArray(material)) material.forEach((item) => item.dispose())
+        else material.dispose()
+      }
+      if (object instanceof Sprite) {
+        const material = object.material as SpriteMaterial
+        material.dispose()
+      }
     })
-    this.satGeometry.dispose()
-    this.satMaterial.dispose()
-    this.reticleTexture.dispose()
-    this.groundTrack.geometry.dispose()
-    ;(this.groundTrack.material as LineBasicMaterial).dispose()
-    this.footprint.mesh.geometry.dispose()
-    this.footprint.material.dispose()
+    this.fallbackReticleTexture.dispose()
   }
 }
-
